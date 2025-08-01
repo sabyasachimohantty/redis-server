@@ -20,6 +20,34 @@ const server = net.createServer((socket) => {
             } else {
                 socket.write(`+INVALID KEY\r\n`)
             }
+        } else if (command.length === 5 && command[0] === 'SET') {
+            if (command[3] === 'EX') {
+                dictionary.set(command[1], command[2])
+                setTimeout(() => {
+                    dictionary.delete(command[1])
+                }, command[4] * 1000)
+                socket.write(`+OK\r\n`)
+            } else if (command[3] === 'PX') {
+                dictionary.set(command[1], command[2])
+                setTimeout(() => {
+                    dictionary.delete(command[1])
+                }, command[4])
+                socket.write(`+OK\r\n`)
+            } else if (command[3] === 'EXAT') {
+                dictionary.set(command[1], command[2])
+                setTimeout(() => {
+                    dictionary.delete(command[1])
+                }, command[4] * 1000 - Date.now())
+                socket.write(`+OK\r\n`)
+            } else if (command[3] === 'PXAT') {
+                dictionary.set(command[1], command[2])
+                setTimeout(() => {
+                    dictionary.delete(command[1])
+                }, command[4] - Date.now())
+                socket.write(`+OK\r\n`)
+            } else {
+                socket.write(`+INVALID OPTION\r\n`)
+            }
         } else {
             socket.write('+INVALID COMMAND\r\n')
         }
