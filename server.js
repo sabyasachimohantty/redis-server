@@ -48,6 +48,33 @@ const server = net.createServer((socket) => {
             } else {
                 socket.write(`+INVALID OPTION\r\n`)
             }
+        } else if (command.length === 2 && command[0] === 'EXISTS') {
+            if (dictionary.has(command[1])) {
+                socket.write(`:1\r\n`)
+            } else {
+                socket.write(`:0\r\n`)
+            }
+        } else if (command.length >= 2 && command[0] === 'DEL') {
+            command.slice(1).forEach((key) => {
+                dictionary.delete(key)
+            })
+            socket.write(`+OK\r\n`)
+        } else if (command.length === 2 && command[0] === 'INCR') {
+            if (dictionary.has(command[1]) && Number.isInteger(dictionary.get(command[1])) ) {
+                let val = dictionary.get(command[0])
+                dictionary.set(command[1], val++)
+                socket.write(`:${val}\r\n`)
+            } else {
+                socket.write(`+INVALID KEY\r\n`)
+            }
+        } else if (command.length === 2 && command[0] === 'DECR') {
+            if (dictionary.has(command[1]) && Number.isInteger(dictionary.get(command[1])) ) {
+                let val = dictionary.get(command[0])
+                dictionary.set(command[1], val--)
+                socket.write(`:${val}\r\n`)
+            } else {
+                socket.write(`+INVALID KEY\r\n`)
+            }
         } else {
             socket.write('+INVALID COMMAND\r\n')
         }
