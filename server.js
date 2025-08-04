@@ -75,6 +75,30 @@ const server = net.createServer((socket) => {
             } else {
                 socket.write(`+INVALID KEY\r\n`)
             }
+        } else if (command.length >= 3 && command[0] === 'RPUSH') {
+            if (!dictionary.has(command[1])) {
+                dictionary.set(command[1], [])
+            }
+            if (Array.isArray(dictionary.get(command[1]))) {
+                command.slice(2).forEach((val) => {
+                    dictionary.get(command[1]).push(val)
+                })
+                socket.write(`:${dictionary.get(command[1]).length}\r\n`)
+            } else {
+                socket.write(`-TYPEERROR INVALID FUNcTION`)
+            }
+        } else if (command.length >= 3 && command[0] === 'LPUSH') {
+            if (!dictionary.has(command[1])) {
+                dictionary.set(command[1], [])
+            }
+            if (Array.isArray(dictionary.get(command[1]))) {
+                command.slice(2).forEach((val) => {
+                    dictionary.get(command[1]).unshift(val)
+                })
+                socket.write(`:${dictionary.get(command[1]).length}\r\n`)
+            } else {
+                socket.write(`-TYPEERROR INVALID FUNcTION`)
+            }
         } else {
             socket.write('+INVALID COMMAND\r\n')
         }
