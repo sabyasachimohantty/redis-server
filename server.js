@@ -1,13 +1,13 @@
 import net from 'net';
 import {parse} from './resp-parser.js';
 import saveRDB from './save.js';
+import loadRDB from './restore.js';
 
-const dictionary = new Map();
 const server = net.createServer((socket) => {
-    socket.on('data', (data) => {
+    socket.on('data', async (data) => {
         const command = parse(data.toString());
         const [cmd, ...args] = command;
-        console.log(cmd)
+        console.log(cmd);
 
         if (!cmd) {
             return sendError(socket, `Empty command`)
@@ -50,7 +50,7 @@ const server = net.createServer((socket) => {
                 if (args.length === 1) {
                     const val = dictionary.get(args[0]);
                     if (val !== undefined) sendBulkString(socket, String(val));
-                    else sendBulkString(socket, '');
+                    else sendBulkString(socket, null);
                 } else {
                     sendError(socket, 'Wrong number of arguments for GET')
                 }
@@ -72,128 +72,79 @@ const server = net.createServer((socket) => {
 
             case 'INCR':
             case 'DECR':
-                
-        }
+                if (args.length === 1) {
+                    let val = dictionary.get(args[0]);
+                    
+                    if (val === undefined) val = 0;
+                    else val = parseInt(val);
 
-        if (command.length === 1 && command[0] === 'PING') {
-            socket.write('+PONG\r\n')
-        } else if (command.length === 2 && command[0] === 'ECHO') {
-            socket.write(`\$${command[1].length}\r\n${command[1]}\r\n`)
-        } else if (command.length === 3 && command[0] === 'SET') {
-            dictionary.set(command[1], command[2])
-            socket.write(`+OK\r\n`)
-        } else if (command.length === 2 && command[0] === 'GET') {
-            if (dictionary.has(command[1])){
-                const val = dictionary.get(command[1])
-                socket.write(`\$${val.length}\r\n${val}\r\n`)
-            } else {
-                socket.write(`+INVALID KEY\r\n`)
-            }
-        } else if (command.length === 5 && command[0] === 'SET') {
-            if (command[3] === 'EX') {
-                dictionary.set(command[1], command[2])
-                setTimeout(() => {
-                    dictionary.delete(command[1])
-                }, command[4] * 1000)
-                socket.write(`+OK\r\n`)
-            } else if (command[3] === 'PX') {
-                dictionary.set(command[1], command[2])
-                setTimeout(() => {
-                    dictionary.delete(command[1])
-                }, command[4])
-                socket.write(`+OK\r\n`)
-            } else if (command[3] === 'EXAT') {
-                dictionary.set(command[1], command[2])
-                setTimeout(() => {
-                    dictionary.delete(command[1])
-                }, command[4] * 1000 - Date.now())
-                socket.write(`+OK\r\n`)
-            } else if (command[3] === 'PXAT') {
-                dictionary.set(command[1], command[2])
-                setTimeout(() => {
-                    dictionary.delete(command[1])
-                }, command[4] - Date.now())
-                socket.write(`+OK\r\n`)
-            } else {
-                socket.write(`+INVALID OPTION\r\n`)
-            }
-        } else if (command.length === 2 && command[0] === 'EXISTS') {
-            if (dictionary.has(command[1])) {
-                socket.write(`:1\r\n`)
-            } else {
-                socket.write(`:0\r\n`)
-            }
-        } else if (command.length >= 2 && command[0] === 'DEL') {
-            command.slice(1).forEach((key) => {
-                dictionary.delete(key)
-            })
-            socket.write(`+OK\r\n`)
-        } else if (command.length === 2 && command[0] === 'INCR') {
-            if (dictionary.has(command[1]) && Number.isInteger(dictionary.get(command[1])) ) {
-                let val = dictionary.get(command[0])
-                dictionary.set(command[1], val++)
-                socket.write(`:${val}\r\n`)
-            } else {
-                socket.write(`+INVALID KEY\r\n`)
-            }
-        } else if (command.length === 2 && command[0] === 'DECR') {
-            if (dictionary.has(command[1]) && Number.isInteger(dictionary.get(command[1])) ) {
-                let val = dictionary.get(command[0])
-                dictionary.set(command[1], val--)
-                socket.write(`:${val}\r\n`)
-            } else {
-                socket.write(`+INVALID KEY\r\n`)
-            }
-        } else if (command.length >= 3 && command[0] === 'RPUSH') {
-            if (!dictionary.has(command[1])) {
-                dictionary.set(command[1], [])
-            }
-            if (Array.isArray(dictionary.get(command[1]))) {
-                command.slice(2).forEach((val) => {
-                    dictionary.get(command[1]).push(val)
-                })
-                socket.write(`:${dictionary.get(command[1]).length}\r\n`)
-            } else {
-                socket.write(`-TYPEERROR INVALID FUNcTION`)
-            }
-        } else if (command.length >= 3 && command[0] === 'LPUSH') {
-            if (!dictionary.has(command[1])) {
-                dictionary.set(command[1], [])
-            }
-            if (Array.isArray(dictionary.get(command[1]))) {
-                command.slice(2).forEach((val) => {
-                    dictionary.get(command[1]).unshift(val)
-                })
-                socket.write(`:${dictionary.get(command[1]).length}\r\n`)
-            } else {
-                socket.write(`-TYPEERROR INVALID FUNcTION`)
-            }
-        } else if (command.length === 1 && command[0] === 'SAVE') {
-            saveRDB(dictionary)
-            
-        } else {
-            socket.write('+INVALID COMMAND\r\n')
+                    if (!Number.isInteger(val)) {
+                        return sendError(socket, 'Value is not an integer');
+                    }
+
+                    val = cmd === 'INCR' ? val + 1 : val - 1;
+                    dictionary.set(args[0], val);
+                    sendInteger(socket, val);
+                } else {
+                    sendError(socket, `Wrong number of arguments for ${cmd}`);
+                }
+                break;
+
+            case 'RPUSH':
+            case 'LPUSH':
+                if (args.length >= 2) {
+                    const [key, ...values] = args;
+
+                    if (!dictionary.get(key)) dictionary.set(key, []);
+                    const list = dictionary.get(key);
+
+                    if (!Array.isArray(list)) return sendError(socket, 'Key is not a list');
+
+                    if (cmd === 'RPUSH') values.forEach(val => list.push(val));
+                    else values.forEach(val => list.unshift(val));
+
+                    sendInteger(socket, list.length);
+                } else {
+                    sendError(socket, `Wroung number of arguments for ${cmd}`);
+                }
+                break;
+
+            case 'SAVE':
+                if (args.length === 0) {
+                    await saveRDB(dictionary);
+                    sendSimpleString(socket, 'OK');
+                } else {
+                    sendError(socket, 'Wrong number of arguments for SAVE');
+                }
+                break;
+
+            default:
+                sendError(socket, `Unknown command ${cmd}`);
+                break;
+
         }
     })
 
-    socket.on('end', () => {
-        console.log('Client disconnected')
+    socket.on('end', async () => {
+        await saveRDB(dictionary);
+        console.log('Client disconnected');
     })
 
     socket.on('error', (err) => {
-        console.log(`Socket error: ${err.message}`)
+        console.log(`Socket error: ${err.message}`);
     })
 })
 
 
 
-const PORT = process.env.PORT || 8080
+const PORT = process.env.PORT || 8080;
+const dictionary = new Map(Object.entries(await loadRDB()));
 server.listen(PORT, (err) => {
     if (err) {
-        console.log(`Error while running server: ${err.message}`)
+        console.log(`Error while running server: ${err.message}`);
         return
     }
-    console.log(`REDIS SERVER is successfully running on ${PORT}`)
+    console.log(`REDIS SERVER is successfully running on ${PORT}`);
 })
 
 // Reply Helpers
@@ -202,7 +153,8 @@ function sendSimpleString(socket, str) {
 }
 
 function sendBulkString(socket, str) {
-    socket.write(`\$${str.length}\r\n${str}\r\n`);
+    if (str === null) socket.write(`$-1\r\n`);
+    else socket.write(`\$${str.length}\r\n${str}\r\n`);
 }
 
 function sendInteger(socket, int) {
