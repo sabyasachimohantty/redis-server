@@ -94,12 +94,11 @@ function parse(message) {
     }
 
     function parseError(message) {
-        return message.slice(i, message.length - 2)
+        return new Error(message.slice(i, message.length - 2))
     }
 
 }
 
-// console.log(parse('*1\r\n$7\r\nCOMMAND\r\n'))
 
 export {
     parse

@@ -1,5 +1,5 @@
 import net from 'net';
-import {parse} from './resp-parser.js';
+import { parse } from './resp-parser.js';
 import saveRDB from './save.js';
 import loadRDB from './restore.js';
 
@@ -7,18 +7,17 @@ const server = net.createServer((socket) => {
     socket.on('data', async (data) => {
         const command = parse(data.toString());
         const [cmd, ...args] = command;
-        console.log(cmd);
 
         if (!cmd) {
             return sendError(socket, `Empty command`)
         }
 
-        switch (cmd) {
+        switch (cmd.toUpperCase()) {
             case 'PING':
                 if (args.length === 0) sendSimpleString(socket, 'PONG');
                 else sendError(socket, 'Wrong number of arguments for PING');
                 break;
-            
+
             case 'ECHO':
                 if (args.length === 1) sendBulkString(socket, args[0]);
                 else sendError(socket, 'Wrong number of arguments for ECHO');
@@ -31,7 +30,7 @@ const server = net.createServer((socket) => {
                 } else if (args.length === 4) {
                     const [key, value, option, time] = args;
                     dictionary.set(key, value);
-                    
+
                     let timeout;
                     if (option === 'EX') timeout = parseInt(time) * 1000;
                     else if (option === 'PX') timeout = parseInt(time);
@@ -74,7 +73,7 @@ const server = net.createServer((socket) => {
             case 'DECR':
                 if (args.length === 1) {
                     let val = dictionary.get(args[0]);
-                    
+
                     if (val === undefined) val = 0;
                     else val = parseInt(val);
 
